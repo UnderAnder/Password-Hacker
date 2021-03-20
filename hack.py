@@ -3,39 +3,64 @@ from socket import socket
 from itertools import product
 
 
-class Socket:
+class TCPClient:
     def __init__(self, host, port):
         self.host = host
-        self.port = int(port)
+        self.port = port
+        self.socket = None
+
+    def connect(self):
+        if self.socket is None:
+            self.socket = socket()
+        self.socket.connect((self.host, self.port))
+
+    def disconnect(self):
+        self.socket.close()
+        self.socket = None
+
+    def send_data(self, data):
+        if self.socket is None:
+            self.connect()
+        self.socket.send(data)
+
+    def read_data(self):
+        if self.socket is None:
+            self.connect()
+        return self.socket.recv(1024).decode()
+
+
+class Passwords:
+    def __init__(self, conn):
+        self.conn = conn
 
     def brute_pass(self):
-        with socket() as sock:
-            sock.connect((self.host, self.port))
-            for password in generate_password():
-                msg = ''.join(map(str, password)).encode()
-                sock.send(msg)
-                resp = sock.recv(1024).decode()
-                if resp == 'Connection success!':
-                    print(msg.decode())
-                    break
+        for password in Passwords.generate_password():
+            msg = ''.join(map(str, password)).encode()
+            self.conn.send_data(msg)
+            resp = self.conn.read_data()
+            if resp == 'Connection success!':
+                print(msg.decode())
+                break
 
-
-def generate_password():
-    index = 1
-    while True:
-        abc = 'abcdefghijklmnopqrstuvwxyz1234567890'
-        yield from product(abc, repeat=index)
-        index += 1
+    @staticmethod
+    def generate_password():
+        index = 1
+        while True:
+            charset = 'abcdefghijklmnopqrstuvwxyz1234567890'
+            yield from product(charset, repeat=index)
+            index += 1
 
 
 def main():
     parse_args = argparse.ArgumentParser()
-    parse_args.add_argument('address')
-    parse_args.add_argument('port')
+    parse_args.add_argument('host', help='enter hostname')
+    parse_args.add_argument('port', help='enter port number', type=int)
     args = parse_args.parse_args()
 
-    Socket(args.address, args.port).brute_pass()
-
+    conn = TCPClient(args.host, args.port)
+    conn.connect()
+    Passwords(conn).brute_pass()
+    conn.disconnect()
 
 if __name__ == '__main__':
     main()
